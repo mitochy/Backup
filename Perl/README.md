@@ -1,4 +1,5 @@
-MyScript
-========
+Backup Script
+=============
 
-Scripts that I use for my own purposes
+This repository contain scripts for my own purposes.
+Warning: Not all of these scripts are curated and some might be buggy!
