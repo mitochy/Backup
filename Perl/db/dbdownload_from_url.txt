@@ -1,0 +1,52 @@
+#!/usr/bin/perl
+
+use strict; use warnings;
+
+my ($ftplist) = @ARGV;
+
+die "Usage: dbdownload_fasta.pl ftplist\n" unless @ARGV;
+
+my $folder = "/home/mitochi/Desktop/Work/newcegma/";
+
+open (my $in, "<", $ftplist) or die "Cannot read from $ftplist: $!\n";
+
+my $count = 0;
+my $i = 0;
+my @fullcmd;
+my @fullcmd2;
+while (my $line = <$in>) {
+	$count++;
+	$i++ if $count % 100 == 0;
+	print "$i\t$count\n";
+	chomp($line);
+	my ($org, $etc, $fh) = $line =~ /^ftp.+mysql\/(\w+_\w+)(_\w+)\/\/(.+)$/i;
+	my $dir = "$folder\/mysql/$org$etc";
+	#print "dir = $dir\n";
+	unless (-d $dir) {
+		mkdir $dir or print "Failed to creat directory $dir: $!\n";
+	}
+	chdir $dir;
+	my $cmd = "curl $line > $dir\/$fh & ";
+	#print "\tcmd = $cmd\n";
+
+	$fullcmd[$i] .= $cmd;
+
+	my $cmd2 = "gunzip $dir\/$fh $dir\/ & ";
+	#print "\tcmd2 = $cmd\n";
+	$fullcmd2[$i] .= $cmd2 if $fh =~ /.gz$/;
+	chdir $folder;
+}
+
+close $in;
+
+for (my $i = 0; $i < @fullcmd; $i++) {
+	system($fullcmd[$i]);
+	print "Fullcmd $i\n";
+	print "Sleeping 60s...\n";
+	sleep(60);
+	print "Wakes up!\n";
+}
+#print "$fullcmd\n";
+#print "$fullcmd2\n";
+#system($fullcmd);
+#system($fullcmd2);
