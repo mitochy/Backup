@@ -1,19 +1,20 @@
 #!/usr/bin/perl
 use strict; use warnings; use Getopt::Std;
-use vars qw($opt_o $opt_e $opt_n $opt_b);
-getopts("o:enb");
+use vars qw($opt_o $opt_e $opt_n $opt_b $opt_t);
+getopts("o:enbt:");
 
-my ($query, $query_col, $subject, $subject_col, $delimiter) = @ARGV;
-die "usage: $0 [options] <queryfile> <que data col> <subject file> <subj data col> <delimiter [space tab]>
+my ($query, $query_col, $subject, $subject_col) = @ARGV;
+die "usage: $0 [options] <queryfile> <que data col> <subject file> <subj data col>
 options:
 -o: output
 -e: exists only
 -n: print not exists only
 -b: print both
-" unless @ARGV == 5;
-
-my $output = defined($opt_o) ? "$opt_o\_exists.bed" : "$query.intersected_exists.bed" if defined($opt_e) or defined($opt_b);
-my $output2 = defined($opt_o) ? "$opt_o\_notexists.bed" : "$query.intersected_notexists.bed" if defined($opt_n) or defined($opt_b);
+-t: delimiter (space or tab) [default: tab]
+" unless @ARGV == 4;
+my $delimiter = defined($opt_t) ? $opt_t : "tab";
+my $output = "$query.intersected_exists.bed" if defined($opt_e) or defined($opt_b);
+my $output2 = "$query.intersected_notexists.bed" if defined($opt_n) or defined($opt_b);
 
 die "delimiter must be space or tab\n" unless $delimiter eq "space" or $delimiter eq "tab";
 open (my $que, "<", $query) or die "Cannot read from $query: $!\n";
@@ -33,7 +34,7 @@ while (my $line = <$que>) {
 	$query{data}{$arr[$query_col]}++;
 	$query{line}{$arr[$query_col]} = $line;
 }
-
+close $que;
 my %sub;
 while (my $line = <$sub>) {
 	chomp($line);
@@ -59,7 +60,8 @@ foreach my $que (sort keys %{$query{data}}) {
 	$data{notexist}{data}{$que}++ if not exists($sub{data}{$que});
 	$data{notexist}{line}{$que} = $query{line}{$que} if not exists($sub{data}{$que});
 	$data{exist}{data}{$que}++ if exists($sub{data}{$que});
-	$data{exist}{line}{$que} = $query{line}{$que};
+
+	$data{exist}{line}{$que} = $query{line}{$que} if exists($sub{data}{$que});
 }
 
 my $querycount = (keys %{$query{data}});
@@ -74,7 +76,23 @@ print "Exists: \n";
 foreach my $que (keys %{$data{exist}{data}}) {
 	$count++;
 	print "$que\n" if $count <= 10;
-	print $out "$data{exist}{line}{$que}\n" if defined($output);
+}
+if (defined($output)) {
+	open (my $que2, "<", $query) or die "Cannot read from $query: $!\n";
+	while (my $line = <$que2>) {
+		chomp($line);
+		next if $line =~ /^"V1/i;
+		next if $line =~ /Ensembl/;
+		$line =~ s/"//ig;
+		my @arr = split("\t", $line) if $delimiter eq "tab";
+		@arr = split(" ", $line) if $delimiter eq "space";
+		next if not defined($arr[$query_col]);
+		print "LINE $line\n" if $line =~ /ENSG00000160766/;
+		if (defined($data{exist}{line}{$arr[$query_col]}) and $data{exist}{line}{$arr[$query_col]} !~ /^$/) {
+			print $out "$data{exist}{line}{$arr[$query_col]}\n" 
+		}
+	}
+	close $que2;
 }
 print "Not exists: \n";
 $count = 0;
@@ -82,4 +100,20 @@ foreach my $que (keys %{$data{notexist}{data}}) {
 	$count++;
 	print "$que\n" if $count == 10;
 	print $out2 "$data{notexist}{line}{$que}\n" if defined($output2);
+}
+if (defined($output2)) {
+	open (my $que2, "<", $query) or die "Cannot read from $query: $!\n";
+	while (my $line = <$que2>) {
+		chomp($line);
+		next if $line =~ /^"V1/i;
+		next if $line =~ /Ensembl/;
+		$line =~ s/"//ig;
+		my @arr = split("\t", $line) if $delimiter eq "tab";
+		@arr = split(" ", $line) if $delimiter eq "space";
+		next if not defined($arr[$query_col]);
+		if (defined($data{notexist}{line}{$arr[$query_col]}) and $data{notexist}{line}{$arr[$query_col]} !~ /^$/) {
+			print $out2 "$data{notexist}{line}{$arr[$query_col]}\n" 
+		}
+	}
+	close $que2;
 }

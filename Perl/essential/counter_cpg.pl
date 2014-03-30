@@ -1,12 +1,17 @@
 #!/usr/bin/perl
 
-use strict; use warnings; use FAlite; use mitochy; use Thread::Queue;
+use strict; use warnings; use FAlite; use mitochy; use Thread::Queue; use Getopt::Std;
+use vars qw($opt_w $opt_s);
+getopts("w:s:");
 
 my ($input) = @ARGV;
 die "usage: <fasta>\n" unless @ARGV == 1;
 
-my $window = 200;
-my $step   = 1;
+my $window = defined($opt_w) ? $opt_w : 200;
+my $step   = defined($opt_s) ? $opt_s : 10;
+checkNumber($window);
+checkNumber($step);
+
 open (my $in, "<", $input) or die;
 open (my $out1, ">", "$input\.dens.tsv") or die;
 open (my $out2, ">", "$input\.cont.tsv") or die;
@@ -58,3 +63,9 @@ for (my $i = 0; $i < @cpg; $i++) {
 	print $out3 "$pos\t$skew\n";
 }
 
+
+sub checkNumber {
+	my ($number) = @_;
+	die "$number is not number\n" unless $number =~ /^\-?\d+\.?\d*$/;
+	return;
+}

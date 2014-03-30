@@ -10,7 +10,7 @@ my $metazoa = "ftp://ftp.ensemblgenomes.org/pub/metazoa/current/gtf/";
 my $fungi = "ftp://ftp.ensemblgenomes.org/pub/fungi/current/gtf/";
 my $bacteria = "ftp://ftp.ensemblgenomes.org/pub/bacteria/current/gtf/";
 my $protists = "ftp://ftp.ensemblgenomes.org/pub/protists/current/gtf/";
-my $chordates = "ftp://ftp.ensembl.org/pub/release-73/gtf/";
+my $chordates = "ftp://ftp.ensembl.org/pub/current_gtf/gtf/";
 my $plants = "ftp://ftp.ensemblgenomes.org/pub/plants/current/gtf/";
 
 my @list;

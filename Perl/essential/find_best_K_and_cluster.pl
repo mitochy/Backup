@@ -6,8 +6,7 @@ use strict; use warnings;
 use Algorithm::KMeans;
 
 my ($datafile, $mask, $desired_K) = @ARGV;
-die "usage: $0 <MASK> <datafile>\n" unless @ARGV >= 1;
-print "here\n";
+die "usage: $0 <datafile> <MASK> <desired K>\n" unless @ARGV >= 1;
 
 $datafile =~ s/\s*$//;
 $datafile =~ s/\n*$//;

@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-use strict; use warnings;
+use strict; use warnings; use mitochy;
 
 my ($input, $column) = @ARGV;
 die "usage: $0 <input> <column (start from 0)\n" unless @ARGV == 2;
@@ -14,7 +14,12 @@ while (my $line = <$in>) {
 }
 close $in;
 
-foreach my $name (sort {$data{$b} <=> $data{$a}} keys %data) {
-	print "$name\t$data{$name}\n";
+my $count = (keys %data);
+print "$input: $count\n";
+my $name = mitochy::getFilename($input);
+open (my $out, ">", "$name.genes") or die;
+foreach my $name (sort {$data{$b} <=> $data{$a} or $a cmp $b} keys %data) {
+	print $out "$name\t$data{$name}\n";
 }
+close $out;
 	

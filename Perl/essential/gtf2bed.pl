@@ -1,9 +1,11 @@
 #!/usr/bin/perl
 
-use strict; use warnings;
+use strict; use warnings; use mitochy;
 
-my ($input, $output) = @ARGV;
-die "usage: $0 <gtf from Ensembl> <output.bed>\n" unless @ARGV == 2;
+my ($input) = @ARGV;
+die "usage: $0 <gtf from Ensembl>\n" unless @ARGV == 1;
+my ($outName) = mitochy::getFilename($input);
+my $output = "$outName.bed";
 my %bed;
 my %gene;
 open (my $in, "<", $input) or die "Cannot read from $input: $!\n";
@@ -15,20 +17,20 @@ while (my $line = <$in>) {
 	my $gene_id;
 	my $type;
 	foreach my $names (@name) {
-		$names =~ s/^\s{1,10}//;
-		($gene_id) = $names =~ /^gene_id "(.+)"$/ if $names =~ /^gene_id/;
-		($type)    = $names =~ /^gene_biotype "(.+)"$/ if $names =~ /^gene_biotype/;
+		$names =~ s/\s{1,10}//g;
+		($gene_id) = $names =~ /^gene_id"(.+)"$/ if $names =~ /^gene_id/;
+		($type)    = $names =~ /^gene_biotype"(.+)"$/ if $names =~ /^gene_biotype/;
 	}
 	$type = $junk0 if not defined($type);# and print "Undef type: using $junk0 at $line\n" if not defined($type);
 	die "Undef gene_id at $line\n" if not defined($gene_id);
 	die "Undef gene_id at $line\n" if $gene_id =~ /^$/;
-	if ($type eq "protein_coding") {
+	#if ($type eq "protein_coding") {
 		$gene{$gene_id} = 1;
 		if (defined($bed{$gene_id}{val})) {
 			print "Previous type: $bed{$gene_id}{val}. Current: $type\n" if $bed{$gene_id}{val} ne $type;
 			die "$line\n" if $bed{$gene_id}{val} ne $type;
 		}
-	}
+	#}
 	my $chr_type;
 	if ($chr =~ /^\d+$/) {
 		$chr_type = "numeric";
@@ -44,6 +46,7 @@ while (my $line = <$in>) {
 }
 close $in;
 my $count = 0;
+my $total = 0;
 foreach my $chr (sort {$bed{numeric}{$a} <=> $bed{numeric}{$b}} keys %{$bed{numeric}}) {
 	foreach my $gene_id (sort {$bed{numeric}{$chr}{$a}{start} <=> $bed{numeric}{$chr}{$b}{start}} keys %{$bed{numeric}{$chr}}) {
 		my $start   = $bed{numeric}{$chr}{$gene_id}{start};
@@ -51,6 +54,7 @@ foreach my $chr (sort {$bed{numeric}{$a} <=> $bed{numeric}{$b}} keys %{$bed{nume
 		my $val     = $bed{numeric}{$chr}{$gene_id}{val};
 		my $strand  = $bed{numeric}{$chr}{$gene_id}{strand};
 		print $out "$chr\t$start\t$end\t$gene_id\t$val\t$strand\n";
+		$total++;
 		$count++ if $val eq "protein_coding";
 	}
 }
@@ -61,7 +65,8 @@ foreach my $chr (sort {$bed{alphabet}{$a} cmp $bed{alphabet}{$b}} keys %{$bed{al
 		my $val     = $bed{alphabet}{$chr}{$gene_id}{val};
 		my $strand  = $bed{alphabet}{$chr}{$gene_id}{strand};
 		print $out "$chr\t$start\t$end\t$gene_id\t$val\t$strand\n";
+		$total++;
 		$count++ if $val eq "protein_coding";
 	}
 }
-print "Count = $count\n";
+print "$input Total = $total, Protein_coding = $count\n";

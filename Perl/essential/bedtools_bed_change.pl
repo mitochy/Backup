@@ -2,8 +2,8 @@
 
 use strict; use warnings; use Getopt::Std;
 
-use vars qw($opt_x $opt_y $opt_o $opt_a $opt_b $opt_i $opt_s);
-getopts("i:x:o:y:abs");
+use vars qw($opt_x $opt_y $opt_o $opt_a $opt_b $opt_i $opt_s $opt_f $opt_m $opt_c);
+getopts("i:x:o:y:abcsf:m");
 
 die "
 Usage: $0 [option] -i bed file
@@ -11,10 +11,13 @@ Usage: $0 [option] -i bed file
 options:
 -a: Get start of gene (strand specific) and offset accordingly
 -b: Get end of gene (strand specific) and offset accordingly
+-c: Get middle of gene and offset accordingly
 -s: Disable strand specific (default: on)
 -x: start offset from current (default: 0)
 -y: end offset from current (default: 0)
 -o: output (name)
+-f: Filter genes less than ths length (default: take all)
+-m: Stop filtering out genes which after subtraction has coordinates less than 0 (Default: Filtered)
 
 E.g. you want all bed file
 chr1	5000	6000	name	0	-
@@ -25,10 +28,7 @@ then:
 $0 -i foo.bed -x -1000 -y 4000 -o bar.bed 
 
 E.g. +/- 1kb region of TSS (strand specific)
-$0 -i foo.bed -x -1000 -y 1000 -s -o bar.bed
-
-E.g. +/- 1kb region of TTS (strand specific)
-$0 -i foo.bed -x -1000 -y 1000 -e -o bar.bed
+$0 -i foo.bed -x -1000 -y 1000 -o bar.bed
 
 " unless defined($opt_i);
 
@@ -36,27 +36,36 @@ my $input  = $opt_i;
 my $x_off  = defined($opt_x) ? $opt_x : 0;
 my $y_off  = defined($opt_y) ? $opt_y : 0;
 my $output = defined($opt_o) ? $opt_o : "$input.bed";
+my $filter = defined($opt_f) ? $opt_f : -99999999999999;
+
 print "Output = $output\n";
 open (my $in, "<", $input) or die "Cannot read from $input: $!\n";
 open (my $out, ">", $output) or die "Cannot write to $output: $!\n";
 while (my $line = <$in>) {
 	chomp($line);
+	next if $line =~ /track/;
+	next if $line =~ /\#/;
 	my ($chr, $start, $end, $name, $val, $strand, @others) = split("\t", $line);
+	next if $end - $start + 1 < $filter;
 
-	if ($strand ne "-" and $strand ne "+") {
-		if (defined($others[0]) and ($others[0] eq "+" or $others[0] eq "-")) {
-			my $temp = $strand;
-			$strand = $others[0];
-			$others[0] = $temp;
+	if (not defined($strand)) {
+		$strand = "+";
+	}
+	else {
+		if ($strand ne "-" and $strand ne "+") {
+			if (defined($others[0]) and ($others[0] eq "+" or $others[0] eq "-")) {
+				my $temp = $strand;
+				$strand = $others[0];
+				$others[0] = $temp;
+			}
+			else {
+				die "Strand information is incorrect (strand = $strand) at line $line\n";
+			}
 		}
-		else {
-			die "Strand information is incorrect (strand = $strand) at line $line\n";
-		}
-
 	}
 	my $others = join("\t", @others) if defined($others[0]);
 	my ($newstart, $newend);
-	if (not defined($opt_a) and not defined($opt_b)) {
+	if (not defined($opt_a) and not defined($opt_b) and not defined($opt_c)) {
 		if (not defined($opt_s)) {
 			if ($strand eq "+" or $strand eq "1" or $strand eq "F") {
 				$newstart = $start + $x_off;
@@ -82,8 +91,13 @@ while (my $line = <$in>) {
 		$newstart = $strand eq "+" ? $pos + $x_off : $pos - $y_off;
 		$newend   = $strand eq "+" ? $pos + $y_off : $pos - $x_off;
 	}
+	elsif (defined($opt_c)) {
+		my $pos = int(($start + $end) / 2);
+		$newstart = $pos + $x_off;
+		$newend   = $pos + $y_off;
+	}
 
-	if ($newstart < 1 or $newend < 1) {
+	if (($newstart < 1 or $newend < 1) and not $opt_m) {
 		print "Skipped [$chr $start $end] because start and/or end is less than 1\n";
 		next;
 	}

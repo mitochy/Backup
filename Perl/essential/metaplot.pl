@@ -10,7 +10,7 @@
 use strict; use warnings; use mitochy;
 use Cache::FileCache;
 use Getopt::Std;
-use vars qw($opt_w $opt_o);
+use vars qw($opt_w $opt_o $opt_m);
 getopts("w:o:m:");
 
 my (@bedfile) = @ARGV;
@@ -19,22 +19,21 @@ die "
 usage: $0 [options] -w wigfile <bed1> <bed2> <bed3> <etc...>
 options:
 -w: wig file (required)
--o: output (default: bedname_wigname.tsv)
--m: max window (default: start to end)
+-o: output Folder (default: bedname_wigname.tsv)
+-m: mathematical equation (default: average)
+-m med: median
+-m dat: Data point count for each bin
 
 " unless @ARGV >= 1 and defined($opt_w);
 
 my $wigfile = $opt_w;
-my $output;
-if (defined($opt_o)) {
-	$output = $opt_o;
-	open (my $out, ">", $output) or die "Cannot write to $output: $!\n";
-	close $out;
-}
 
 foreach my $bedfile (@bedfile) {
 	die "Bedfile $bedfile not exists\n" unless -e $bedfile;
 }
+
+my ($FOLDER, $name) = mitochy::getFilename($wigfile, "folder");
+$FOLDER = $opt_o if defined($opt_o);
 
 my %wig;
 # Caching allows you to skip parsing wigfile
@@ -45,18 +44,18 @@ my %wig;
 # we are not using it right now
 # CODE:
 
-# my $cache = new Cache::FileCache();
-# $cache -> set_cache_root("/home/mitochi/Desktop/Cache");
-# my $wig = $cache -> get("$wigfile");
-# if (not defined($wig)) {
-print "\nProcessing $wigfile\n";
-%wig = %{process_wig($wigfile)};
-# print "Done processing, setting cache\n";
-# $cache -> set("$wigfile", \%wig);
-# }
-# else {
-# %wig = %{$wig};
-# }
+my $cache = new Cache::FileCache();
+$cache -> set_cache_root("/home/mitochi/Desktop/Cache");
+my $wig = $cache -> get("$name\_metaplot");
+if (not defined($wig)) {
+	print "\nProcessing $wigfile\n";
+	%wig = %{process_wig($wigfile)};
+	print "Done processing, setting cache\n";
+	$cache -> set("$name\_metaplot", \%wig);
+}
+else {
+	%wig = %{$wig};
+}
 
 my @output;
 foreach my $bedfile (@bedfile) {
@@ -179,14 +178,14 @@ sub process_wig_and_bed {
 				last if $end - $i   > $MAXWINDOW and ($strand eq "-");
 				if (between($i, $start, $end) == 1) {
 					if ($strand eq "+" and defined($wig{$chr}{$start_index}{$i}{val})) {
-						$total{total}[$i-$start] += $wig{$chr}{$start_index}{$i}{val};
+						push(@{$total{total}[$i-$start]}, $wig{$chr}{$start_index}{$i}{val});
 						$total{count}[$i-$start] ++;
 						$max = $i - $start if not defined($max) or $max < $i - $start;
 						my $currpos = $i - $start;
 						#print "at start $start end $end pos $pos has pos $currpos\n";
 					}
 					elsif ($strand eq "-" and defined($wig{$chr}{$start_index}{$i}{val})) {
-						$total{total}[$end - $i] += $wig{$chr}{$start_index}{$i}{val};
+						push(@{$total{total}[$end - $i]}, $wig{$chr}{$start_index}{$i}{val});
 						$total{count}[$end - $i] ++;
 						$max = $end - $i if not defined($max) or $max < $end - $i;
 						my $currpos = $end - $i;
@@ -208,12 +207,12 @@ sub process_wig_and_bed {
 					last if $end - $i   > $MAXWINDOW and ($strand eq "-");
 					if (between($i, $start, $end) == 1) {
 						if ($strand eq "+" and defined ($wig{$chr}{$start_index}{$i}{val})) {
-							$total{total}[$i-$start] += $wig{$chr}{$end_index}{$i}{val};
+							push(@{$total{total}[$i-$start]}, $wig{$chr}{$end_index}{$i}{val});
 							$total{count}[$i-$start] ++;
 							$max = $i - $start if not defined($max) or $max < $i - $start;
 						}
 						elsif ($strand eq "-" and defined($wig{$chr}{$start_index}{$i}{val})) {
-							$total{total}[$end - $i] += $wig{$chr}{$end_index}{$i}{val};
+							push(@{$total{total}[$end - $i]}, $wig{$chr}{$end_index}{$i}{val});
 							$total{count}[$end - $i] ++;
 							$max = $end - $i if not defined($max) or $max < $end - $i;
 						}
@@ -227,33 +226,51 @@ sub process_wig_and_bed {
 	# Calculate the average of that position	
 	for (my $i = 0; $i < $MAXWINDOW; $i++) {
 		next if not defined($total{total}[$i]);
-		$total{total}[$i] /= $total{count}[$i];
+		if (defined($opt_m) and $opt_m eq "med") {
+			my @value = sort {$a <=> $b} @{$total{total}[$i]};
+			$total{total2}[$i] = $value[int(@value/2)] if @value < 20;
+			if (@value >= 20) {
+				for (my $j = -5; $j <= 5; $j++) {
+					$total{total2}[$i] += $value[int(@value/2)+$j] / 11;
+				}
+			}
+			
+		}
+		if (defined($opt_m) and $opt_m eq "dat") {
+			$total{total2}[$i] = $total{count}[$i];
+		}
+		else {
+			for (my $j = 0; $j < @{$total{total}[$i]}; $j++) {
+				$total{total2}[$i] += $total{total}[$i][$j] / $total{count}[$i];
+			}
+		}
+		
 	}
 
-	my $bedname = mitochy::get_filename($bedfile);
-	my $wigname = mitochy::get_filename($wigfile);
+	my $bedname = mitochy::getFilename($bedfile);
+	my $wigname = mitochy::getFilename($wigfile);
 
 	my $fail_to_open = 0;
 
-	open (OUT, ">", $output) or die "Cannot write to $output: $!\n" if defined($output);
-
 
 	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
-	open (OUT, ">", "$bedname\_$wigname.tsv") or $fail_to_open = 1 if not defined($output);
-	print "Cannot write to $bedname\_$wigname.tsv:$!\n" if $fail_to_open == 1 and not defined($output);
-	open (OUT, ">", "$year\_$mon\_$mday\_$hour\_$min\_$sec.tsv") if ($fail_to_open == 1 and not defined($output));
+	open (OUT, ">", "$FOLDER\/$bedname\_$wigname.tsv") or $fail_to_open = 1;# if not defined($output);
+	print "Cannot write to $bedname\_$wigname.tsv:$!\n" if $fail_to_open == 1;# and not defined($output);
+	open (OUT, ">", "$FOLDER\/$year\_$mon\_$mday\_$hour\_$min\_$sec.tsv") if ($fail_to_open == 1);# and not defined($output));
 	for (my $i = 0; $i < $MAXWINDOW; $i++) {
-		if (defined($total{total}[$i])) {
-			print OUT "$i\t$total{total}[$i]\n" if defined($total{total}[$i]);
+		my $lineending = $i == $MAXWINDOW -1 ? "" : "\t";
+		print OUT "$name\t" if $i == 0;
+		if (defined($total{total2}[$i])) {
+			print OUT "$total{total2}[$i]$lineending" if defined($total{total2}[$i]);
 		}
 		else {
-			print OUT "$i\t0\n";
+			print OUT "0$lineending";
 		}
 	}
 	close OUT;
-	return($output) if defined($output);
-	return("$bedname\_$wigname.tsv") if $fail_to_open == 0;
-	return("year\_$mon\_$mday\_$hour\_$min\_$sec.tsv") if $fail_to_open == 1;
+	#return($output) if defined($output);
+	return("$FOLDER\/$bedname\_$wigname.tsv") if $fail_to_open == 0;
+	return("$FOLDER\/year\_$mon\_$mday\_$hour\_$min\_$sec.tsv") if $fail_to_open == 1;
 }
 
 sub between {

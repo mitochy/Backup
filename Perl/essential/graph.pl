@@ -41,8 +41,9 @@ my $colfile = defined($opt_c) ? $opt_c : "/data/mitochi/Work/Codes/dataset/color
 foreach my $input (@input) {
 	die "Cannot read from $input!\n" unless -e $input;
 }
+
 foreach my $input (@input) {
-	my ($folder, $name) = mitochy::get_filename($input);
+	my ($name) = mitochy::getFilename($input);
 	open (my $in, "<", $input) or die "Cannot read from $input: $!\n";
 
 	my $color = getColor($name, $colfile);
@@ -59,8 +60,11 @@ foreach my $input (@input) {
 		push(@val, $val);
 	}
 	close $in;
+
 	my @newval;
 	my @newpos;
+	my $total_data_point = @val;
+	die "Error: Total data point ($total_data_point) is less than window size ($window)\n" if $total_data_point < $window;
 	for (my $i = 0; $i < @val-$window; $i+= $step) {
 		my $val = 0;
 		for (my $j = $i; $j < $i+$window; $j++) {
@@ -70,23 +74,30 @@ foreach my $input (@input) {
 		push(@newval, $val);
 		push(@newpos, $pos[$i]);# + int($window/2));
 	}
+
 	$xstart = $newpos[0];
 	$xend   = $newpos[@newpos-1];
-	my $valcount = @val;
-	print "val = $valcount, Xstart = $xstart, Xend = $xend\n";
 	@val    = @newval;
 	@pos    = @newpos;
+	my $valcount = @val;
+	print "Total Y values = $valcount, Xstart = $xstart, Xend = $xend\n";
 	my $Rpos = R_toolbox::newRArray(\@pos, "$name.pos");
 	my $Rval = R_toolbox::newRArray(\@val, "$name.val");
 	$Rdata .= "
 $Rpos
 $Rval
+length1 = length($name.pos)
+length2 = length($name.val)
+print(length1)
+print(length2)
 	";
 	$Rlines .= "
-smoothingSpline = smooth.spline($name.pos, $name.val, spar=0.5)
-lines(smoothingSpline,col=$color)
+#smoothingSpline = smooth.spline($name.pos, $name.val, spar=0.5)
+#lines(smoothingSpline,col=$color,type=\"l\")
+lines($name.pos, $name.val,type=\"l\",col=$color)
 
-lines(c($xend*0.8,$xend*0.85),c($yend*(0.95 - 0.05*$xcheck),$yend*(0.95 - 0.05*$xcheck)),col=$color)
+
+lines(c($xend*0.8,$xend*0.85),c($yend*(0.95 - 0.05*$xcheck),$yend*(0.95 - 0.05*$xcheck)),col=$color,type=\"l\")
 text($xend*0.85,$yend*(0.95-0.05*$xcheck),\"$name\",cex=0.5,pos=4)
 	";
 	@pos = ();
@@ -99,11 +110,11 @@ pdf(\"$output\")
 plot(NA,xlim=c($xstart,$xend),ylim=c($ystart,$yend),xlab=\"$xlab\",ylab=\"$ylab\")
 title(\"$title\")
 $Rlines
-lines(c(($xstart+$xend)*0.5,($xstart+$xend)*0.5),c($ystart,0.9*$yend),lty=2)
-lines(c(($xstart+$xend)*0.5,($xstart+$xend)*0.5+0.2*$xend),c(0.9*$yend,0.9*$yend),lty=2)
-lines(c(($xstart+$xend)*0.5+0.2*$xend,($xstart+$xend)*0.5+0.2*$xend),c(0.88*$yend,0.92*$yend))
-lines(c(($xstart+$xend)*0.5+0.2*$xend,($xstart+$xend)*0.5+0.25*$xend),c(0.92*$yend,0.9*$yend))
-lines(c(($xstart+$xend)*0.5+0.2*$xend,($xstart+$xend)*0.5+0.25*$xend),c(0.88*$yend,0.9*$yend))
+lines(c(($xstart+$xend)*0.5,($xstart+$xend)*0.5),c($ystart,0.9*$yend),lty=2,type=\"l\")
+lines(c(($xstart+$xend)*0.5,($xstart+$xend)*0.5+0.2*$xend),c(0.9*$yend,0.9*$yend),lty=2,type=\"l\")
+lines(c(($xstart+$xend)*0.5+0.2*$xend,($xstart+$xend)*0.5+0.2*$xend),c(0.88*$yend,0.92*$yend),type=\"l\")
+lines(c(($xstart+$xend)*0.5+0.2*$xend,($xstart+$xend)*0.5+0.25*$xend),c(0.92*$yend,0.9*$yend),type=\"l\")
+lines(c(($xstart+$xend)*0.5+0.2*$xend,($xstart+$xend)*0.5+0.25*$xend),c(0.88*$yend,0.9*$yend),type=\"l\")
 ";
 
 
@@ -127,3 +138,13 @@ sub getColor {
 	my $color = defined($color{$name}) ? $color{$name} : "rgb(0,0,0,maxColorValue=255)";
 	return($color);
 }
+__END__
+	while (my $line = <$in>) {
+		chomp($line);
+		my ($name, @value) = split("\t", $line);
+		for (my $i = 0; $i < @value; $i++) {
+			@pos[$i] = $i;
+		}
+		@val = @value;
+	}
+
